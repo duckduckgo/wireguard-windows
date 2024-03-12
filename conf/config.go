@@ -50,6 +50,7 @@ type Interface struct {
 	PreDown    string
 	PostDown   string
 	TableOff   bool
+	ExcludeLAN bool
 }
 
 type Peer struct {

@@ -15,9 +15,7 @@ import (
 
 type wfpObjectInstaller func(uintptr) error
 
-//
 // Fundamental WireGuard specific WFP objects.
-//
 type baseObjects struct {
 	provider windows.GUID
 	filters  windows.GUID
@@ -128,6 +126,11 @@ func EnableFirewall(luid uint64, doNotRestrict bool, restrictToDNSServers []neti
 				if err != nil {
 					return wrapErr(err)
 				}
+			}
+
+			err = permitLocalNetworksIPv4(session, baseObjects, 12)
+			if err != nil {
+				return wrapErr(err)
 			}
 
 			err = permitLoopback(session, baseObjects, 13)
