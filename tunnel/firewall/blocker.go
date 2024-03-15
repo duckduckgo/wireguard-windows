@@ -99,7 +99,7 @@ func registerBaseObjects(session uintptr) (*baseObjects, error) {
 	return bo, nil
 }
 
-func EnableFirewall(luid uint64, doNotRestrict bool, restrictToDNSServers []netip.Addr) error {
+func EnableFirewall(luid uint64, doNotRestrict bool, restrictToDNSServers []netip.Addr, excludeLAN bool) error {
 	if wfpSession != 0 {
 		return errors.New("The firewall has already been enabled")
 	}
@@ -128,9 +128,11 @@ func EnableFirewall(luid uint64, doNotRestrict bool, restrictToDNSServers []neti
 				}
 			}
 
-			err = permitLocalNetworksIPv4(session, baseObjects, 12)
-			if err != nil {
-				return wrapErr(err)
+			if excludeLAN {
+				err = permitLocalNetworksIPv4(session, baseObjects, 12)
+				if err != nil {
+					return wrapErr(err)
+				}
 			}
 
 			err = permitLoopback(session, baseObjects, 13)
