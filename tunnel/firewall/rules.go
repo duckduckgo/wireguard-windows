@@ -379,7 +379,7 @@ func permitLocalNetworksIPv4(session uintptr, baseObjects *baseObjects, weight u
 			conditions := []wtFwpmFilterCondition0{condition}
 
 			displayData, err := createWtFwpmDisplayData0(
-				fmt.Sprint("Permit outbound IPv4 traffic for local network", network.cidr()),
+				fmt.Sprint("Permit outbound IPv4 traffic for local network ", network.cidr()),
 				"",
 			)
 			if err != nil {
