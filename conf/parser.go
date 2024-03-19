@@ -119,7 +119,7 @@ func parseTableOff(s string) (bool, error) {
 }
 
 func parseLAN(s string) (bool, error) {
-	if s == "exclude" {
+	if s == "on" {
 		return true, nil
 	}
 	return false, nil
@@ -262,7 +262,7 @@ func FromWgQuick(s, name string) (*Config, error) {
 					return nil, err
 				}
 				conf.Interface.TableOff = tableOff
-			case "lan":
+			case "excludelan":
 				excludeLAN, err := parseLAN(val)
 				if err != nil {
 					return nil, err
