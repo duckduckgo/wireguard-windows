@@ -118,6 +118,13 @@ func parseTableOff(s string) (bool, error) {
 	return false, err
 }
 
+func parseLAN(s string) (bool, error) {
+	if s == "on" {
+		return true, nil
+	}
+	return false, nil
+}
+
 func parseKeyBase64(s string) (*Key, error) {
 	k, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
@@ -255,6 +262,12 @@ func FromWgQuick(s, name string) (*Config, error) {
 					return nil, err
 				}
 				conf.Interface.TableOff = tableOff
+			case "excludelan":
+				excludeLAN, err := parseLAN(val)
+				if err != nil {
+					return nil, err
+				}
+				conf.Interface.ExcludeLAN = excludeLAN
 			default:
 				return nil, &ParseError{l18n.Sprintf("Invalid key for [Interface] section"), key}
 			}

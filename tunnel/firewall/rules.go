@@ -8,6 +8,7 @@ package firewall
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net/netip"
 	"runtime"
 	"unsafe"
@@ -15,9 +16,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-//
 // Known addresses.
-//
 var (
 	linkLocal = wtFwpV6AddrAndMask{[16]uint8{0xfe, 0x80}, 10}
 
@@ -348,6 +347,64 @@ func permitLoopback(session uintptr, baseObjects *baseObjects, weight uint8) err
 		err = fwpmFilterAdd0(session, &filter, 0, &filterID)
 		if err != nil {
 			return wrapErr(err)
+		}
+	}
+
+	return nil
+}
+
+func permitLocalNetworksIPv4(session uintptr, baseObjects *baseObjects, weight uint8) error {
+	// #1 permit outbound traffic to local network
+	{
+		localNetworks := []networkAddress{
+			{"10.0.0.0", "255.0.0.0"},
+			{"169.254.0.0", "255.255.0.0"},
+			{"172.16.0.0", "255.240.0.0"},
+			{"192.168.0.0", "255.255.0.0"},
+			{"224.0.0.0", "240.0.0.0"},
+			{"255.255.255.255", "255.255.255.255"},
+		}
+
+		for _, network := range localNetworks {
+			addrAndMask := network.wtFwpV4AddrAndMask()
+			condValue := wtFwpConditionValue0{
+				_type: cFWP_V4_ADDR_MASK,
+				value: uintptr(unsafe.Pointer(&addrAndMask)),
+			}
+			condition := wtFwpmFilterCondition0{
+				fieldKey:       cFWPM_CONDITION_IP_REMOTE_ADDRESS,
+				matchType:      cFWP_MATCH_EQUAL,
+				conditionValue: condValue,
+			}
+			conditions := []wtFwpmFilterCondition0{condition}
+
+			displayData, err := createWtFwpmDisplayData0(
+				fmt.Sprint("Permit outbound IPv4 traffic for local network ", network.cidr()),
+				"",
+			)
+			if err != nil {
+				return wrapErr(err)
+			}
+
+			filter := wtFwpmFilter0{
+				displayData:         *displayData,
+				providerKey:         &baseObjects.provider,
+				layerKey:            cFWPM_LAYER_ALE_AUTH_CONNECT_V4,
+				subLayerKey:         baseObjects.filters,
+				weight:              filterWeight(weight),
+				numFilterConditions: uint32(len(conditions)),
+				filterCondition:     (*wtFwpmFilterCondition0)(unsafe.Pointer(&conditions[0])),
+				action: wtFwpmAction0{
+					_type: cFWP_ACTION_PERMIT,
+				},
+			}
+
+			filterID := uint64(0)
+
+			err = fwpmFilterAdd0(session, &filter, 0, &filterID)
+			if err != nil {
+				return wrapErr(err)
+			}
 		}
 	}
 
