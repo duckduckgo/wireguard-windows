@@ -33,9 +33,10 @@ type (
 )
 
 type Config struct {
-	Name      string
-	Interface Interface
-	Peers     []Peer
+	Name        string
+	Interface   Interface
+	Peers       []Peer
+	SplitTunnel SplitTunnel
 }
 
 type Interface struct {
@@ -63,6 +64,18 @@ type Peer struct {
 	RxBytes           Bytes
 	TxBytes           Bytes
 	LastHandshakeTime HandshakeTime
+}
+
+type SplitTunnel struct {
+	ExcludedApps []string
+}
+
+func (st *SplitTunnel) IsConfigured() bool {
+	return len(st.ExcludedApps) > 0
+}
+
+func (st *SplitTunnel) AddToExclusion(fullPath string) {
+	st.ExcludedApps = append(st.ExcludedApps, fullPath)
 }
 
 func (conf *Config) IntersectsWith(other *Config) bool {

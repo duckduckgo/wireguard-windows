@@ -7,6 +7,7 @@ package firewall
 
 import (
 	"errors"
+	"golang.zx2c4.com/wireguard/windows/conf"
 	"net/netip"
 	"unsafe"
 
@@ -19,6 +20,9 @@ type wfpObjectInstaller func(uintptr) error
 type baseObjects struct {
 	provider windows.GUID
 	filters  windows.GUID
+
+	splitTunnelProvider windows.GUID
+	splitTunnelFilters  windows.GUID
 }
 
 var wfpSession uintptr
@@ -57,6 +61,15 @@ func registerBaseObjects(session uintptr) (*baseObjects, error) {
 		return nil, wrapErr(err)
 	}
 
+	bo.splitTunnelProvider, err = windows.GenerateGUID()
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	bo.splitTunnelFilters, err = windows.GenerateGUID()
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+
 	//
 	// Register provider.
 	//
@@ -72,6 +85,45 @@ func registerBaseObjects(session uintptr) (*baseObjects, error) {
 		err = fwpmProviderAdd0(session, &provider, 0)
 		if err != nil {
 			// TODO: cleanup entire call chain of these if failure?
+			return nil, wrapErr(err)
+		}
+	}
+
+	//
+	// Register split-tunnel provider.
+	//
+	{
+		displayData, err := createWtFwpmDisplayData0("WireGuard Split-tunnel", "WireGuard split-tunnel provider")
+		if err != nil {
+			return nil, wrapErr(err)
+		}
+		provider := wtFwpmProvider0{
+			providerKey: bo.splitTunnelProvider,
+			displayData: *displayData,
+		}
+		err = fwpmProviderAdd0(session, &provider, 0)
+		if err != nil {
+			// TODO: cleanup entire call chain of these if failure?
+			return nil, wrapErr(err)
+		}
+	}
+
+	//
+	// Register split-tunnel filters sublayer.
+	//
+	{
+		displayData, err := createWtFwpmDisplayData0("WireGuard split-tunnel filters", "Permissive and blocking filters")
+		if err != nil {
+			return nil, wrapErr(err)
+		}
+		sublayer := wtFwpmSublayer0{
+			subLayerKey: bo.splitTunnelFilters,
+			displayData: *displayData,
+			providerKey: &bo.splitTunnelProvider,
+			weight:      ^uint16(0),
+		}
+		err = fwpmSubLayerAdd0(session, &sublayer, 0)
+		if err != nil {
 			return nil, wrapErr(err)
 		}
 	}
@@ -99,7 +151,7 @@ func registerBaseObjects(session uintptr) (*baseObjects, error) {
 	return bo, nil
 }
 
-func EnableFirewall(luid uint64, doNotRestrict bool, restrictToDNSServers []netip.Addr, excludeLAN bool) error {
+func EnableFirewall(luid uint64, doNotRestrict bool, restrictToDNSServers []netip.Addr, excludeLAN bool, splitTunnelConfig conf.SplitTunnel) error {
 	if wfpSession != 0 {
 		return errors.New("The firewall has already been enabled")
 	}
@@ -118,6 +170,13 @@ func EnableFirewall(luid uint64, doNotRestrict bool, restrictToDNSServers []neti
 		err = permitWireGuardService(session, baseObjects, 15)
 		if err != nil {
 			return wrapErr(err)
+		}
+
+		if splitTunnelConfig.IsConfigured() {
+			err = enableSplitTunneling(session, baseObjects, 15, splitTunnelConfig, luid)
+			if err != nil {
+				return wrapErr(err)
+			}
 		}
 
 		if !doNotRestrict {

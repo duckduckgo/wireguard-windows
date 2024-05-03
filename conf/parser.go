@@ -155,6 +155,7 @@ type parserState int
 const (
 	inInterfaceSection parserState = iota
 	inPeerSection
+	inSplitTunnelSection
 	notInASection
 )
 
@@ -189,6 +190,10 @@ func FromWgQuick(s, name string) (*Config, error) {
 			conf.maybeAddPeer(peer)
 			peer = &Peer{}
 			parserState = inPeerSection
+			continue
+		}
+		if lineLower == "[splittunnel]" {
+			parserState = inSplitTunnelSection
 			continue
 		}
 		if parserState == notInASection {
@@ -311,6 +316,13 @@ func FromWgQuick(s, name string) (*Config, error) {
 				peer.Endpoint = *e
 			default:
 				return nil, &ParseError{l18n.Sprintf("Invalid key for [Peer] section"), key}
+			}
+		} else if parserState == inSplitTunnelSection {
+			switch key {
+			case "exclude":
+				conf.SplitTunnel.AddToExclusion(val)
+			default:
+				return nil, &ParseError{l18n.Sprintf("Invalid key for [SplitTunnel] section"), key}
 			}
 		}
 	}

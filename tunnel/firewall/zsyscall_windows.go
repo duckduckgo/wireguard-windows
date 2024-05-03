@@ -40,17 +40,27 @@ func errnoErr(e syscall.Errno) error {
 var (
 	modfwpuclnt = windows.NewLazySystemDLL("fwpuclnt.dll")
 
+	procFwpmCalloutAdd0           = modfwpuclnt.NewProc("FwpmCalloutAdd0")
 	procFwpmEngineClose0          = modfwpuclnt.NewProc("FwpmEngineClose0")
 	procFwpmEngineOpen0           = modfwpuclnt.NewProc("FwpmEngineOpen0")
 	procFwpmFilterAdd0            = modfwpuclnt.NewProc("FwpmFilterAdd0")
 	procFwpmFreeMemory0           = modfwpuclnt.NewProc("FwpmFreeMemory0")
 	procFwpmGetAppIdFromFileName0 = modfwpuclnt.NewProc("FwpmGetAppIdFromFileName0")
 	procFwpmProviderAdd0          = modfwpuclnt.NewProc("FwpmProviderAdd0")
+	procFwpmProviderContextAdd0   = modfwpuclnt.NewProc("FwpmProviderContextAdd0")
 	procFwpmSubLayerAdd0          = modfwpuclnt.NewProc("FwpmSubLayerAdd0")
 	procFwpmTransactionAbort0     = modfwpuclnt.NewProc("FwpmTransactionAbort0")
 	procFwpmTransactionBegin0     = modfwpuclnt.NewProc("FwpmTransactionBegin0")
 	procFwpmTransactionCommit0    = modfwpuclnt.NewProc("FwpmTransactionCommit0")
 )
+
+func fwpmCalloutAdd0(engineHandle uintptr, callout *wtFwpmCallout0, sd uintptr, id *uint32) (err error) {
+	r1, _, e1 := syscall.Syscall6(procFwpmCalloutAdd0.Addr(), 4, uintptr(engineHandle), uintptr(unsafe.Pointer(callout)), uintptr(sd), uintptr(unsafe.Pointer(id)), 0, 0)
+	if r1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
 
 func fwpmEngineClose0(engineHandle uintptr) (err error) {
 	r1, _, e1 := syscall.Syscall(procFwpmEngineClose0.Addr(), 1, uintptr(engineHandle), 0, 0)
@@ -91,6 +101,14 @@ func fwpmGetAppIdFromFileName0(fileName *uint16, appID unsafe.Pointer) (err erro
 
 func fwpmProviderAdd0(engineHandle uintptr, provider *wtFwpmProvider0, sd uintptr) (err error) {
 	r1, _, e1 := syscall.Syscall(procFwpmProviderAdd0.Addr(), 3, uintptr(engineHandle), uintptr(unsafe.Pointer(provider)), uintptr(sd))
+	if r1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+func fwpmProviderContextAdd0(engineHandle uintptr, providerContext *wtFwpmProviderContext0, sd uintptr, id *uint64) (err error) {
+	r1, _, e1 := syscall.Syscall6(procFwpmProviderContextAdd0.Addr(), 4, uintptr(engineHandle), uintptr(unsafe.Pointer(providerContext)), uintptr(sd), uintptr(unsafe.Pointer(id)), 0, 0)
 	if r1 != 0 {
 		err = errnoErr(e1)
 	}
