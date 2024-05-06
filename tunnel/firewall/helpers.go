@@ -146,3 +146,19 @@ func getCurrentProcessAppID() (*wtFwpByteBlob, error) {
 	}
 	return appID, nil
 }
+
+func getBackendAppID() (*wtFwpByteBlob, error) {
+	currentFile := "C:\\Users\\lezzi\\Documents\\DuckDuckGo\\windows-browser\\NetworkProtection\\NetworkProtection\\bin\\ARM64\\Debug\\net6.0\\DuckDuckGo.VPN.Backend.exe"
+
+	curFilePtr, err := windows.UTF16PtrFromString(currentFile)
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+
+	var appID *wtFwpByteBlob
+	err = fwpmGetAppIdFromFileName0(curFilePtr, unsafe.Pointer(&appID))
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	return appID, nil
+}

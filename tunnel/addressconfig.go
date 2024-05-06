@@ -125,7 +125,7 @@ startOver:
 	}
 	if (family == windows.AF_INET && foundDefault4) || (family == windows.AF_INET6 && foundDefault6) {
 		ipif.UseAutomaticMetric = false
-		ipif.Metric = 0
+		ipif.Metric = 5
 	}
 	err = ipif.Set()
 	if err == windows.ERROR_NOT_FOUND && retryOnFailure {

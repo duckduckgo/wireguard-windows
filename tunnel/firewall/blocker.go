@@ -120,6 +120,11 @@ func EnableFirewall(luid uint64, doNotRestrict bool, restrictToDNSServers []neti
 			return wrapErr(err)
 		}
 
+		err = permitBackend(session, baseObjects, 15)
+		if err != nil {
+			return wrapErr(err)
+		}
+
 		if !doNotRestrict {
 			if len(restrictToDNSServers) > 0 {
 				err = blockDNS(restrictToDNSServers, session, baseObjects, 15, 14)

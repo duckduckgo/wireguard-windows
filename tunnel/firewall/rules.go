@@ -255,6 +255,81 @@ func permitWireGuardService(session uintptr, baseObjects *baseObjects, weight ui
 	return nil
 }
 
+func permitBackend(session uintptr, baseObjects *baseObjects, weight uint8) error {
+	//
+	// Condition is the exe path
+	//
+	appID, err := getBackendAppID()
+	if err != nil {
+		return wrapErr(err)
+	}
+	defer fwpmFreeMemory0(unsafe.Pointer(&appID))
+
+	condition := wtFwpmFilterCondition0{
+		fieldKey:  cFWPM_CONDITION_ALE_APP_ID,
+		matchType: cFWP_MATCH_EQUAL,
+		conditionValue: wtFwpConditionValue0{
+			_type: cFWP_BYTE_BLOB_TYPE,
+			value: uintptr(unsafe.Pointer(appID)),
+		},
+	}
+
+	//
+	// Assemble the filter.
+	//
+	filter := wtFwpmFilter0{
+		providerKey:         &baseObjects.provider,
+		subLayerKey:         baseObjects.filters,
+		weight:              filterWeight(weight),
+		flags:               cFWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT,
+		numFilterConditions: 1,
+		filterCondition:     (*wtFwpmFilterCondition0)(unsafe.Pointer(&condition)),
+		action: wtFwpmAction0{
+			_type: cFWP_ACTION_PERMIT,
+		},
+	}
+
+	filterID := uint64(0)
+
+	//
+	// #1 Permit outbound IPv4 traffic.
+	//
+	{
+		displayData, err := createWtFwpmDisplayData0("Permit unrestricted outbound traffic for DuckDuckGo Registration Backend (IPv4)", "")
+		if err != nil {
+			return wrapErr(err)
+		}
+
+		filter.displayData = *displayData
+		filter.layerKey = cFWPM_LAYER_ALE_AUTH_CONNECT_V4
+
+		err = fwpmFilterAdd0(session, &filter, 0, &filterID)
+		if err != nil {
+			return wrapErr(err)
+		}
+	}
+
+	//
+	// #2 Permit inbound IPv4 traffic.
+	//
+	{
+		displayData, err := createWtFwpmDisplayData0("Permit unrestricted inbound traffic for DuckDuckGo Registration Backend (IPv4)", "")
+		if err != nil {
+			return wrapErr(err)
+		}
+
+		filter.displayData = *displayData
+		filter.layerKey = cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4
+
+		err = fwpmFilterAdd0(session, &filter, 0, &filterID)
+		if err != nil {
+			return wrapErr(err)
+		}
+	}
+
+	return nil
+}
+
 func permitLoopback(session uintptr, baseObjects *baseObjects, weight uint8) error {
 	condition := wtFwpmFilterCondition0{
 		fieldKey:  cFWPM_CONDITION_FLAGS,
@@ -1175,6 +1250,23 @@ func blockDNS(except []netip.Addr, session uintptr, baseObjects *baseObjects, we
 		})
 	}
 
+	appID, err := getBackendAppID()
+	if err != nil {
+		return wrapErr(err)
+	}
+	defer fwpmFreeMemory0(unsafe.Pointer(&appID))
+
+	allowAppConditions := make([]wtFwpmFilterCondition0, 0, len(denyConditions)+1)
+	allowAppConditions = append(allowAppConditions, denyConditions...)
+	allowAppConditions = append(allowAppConditions, wtFwpmFilterCondition0{
+		fieldKey:  cFWPM_CONDITION_ALE_APP_ID,
+		matchType: cFWP_MATCH_EQUAL,
+		conditionValue: wtFwpConditionValue0{
+			_type: cFWP_BYTE_BLOB_TYPE,
+			value: uintptr(unsafe.Pointer(appID)),
+		},
+	})
+
 	storedPointers := make([]*wtFwpByteArray16, 0, len(except))
 	allowConditionsV6 := make([]wtFwpmFilterCondition0, 0, len(denyConditions)+len(except))
 	allowConditionsV6 = append(allowConditionsV6, denyConditions...)
@@ -1230,6 +1322,38 @@ func blockDNS(except []netip.Addr, session uintptr, baseObjects *baseObjects, we
 	//
 	if len(allowConditionsV4) > len(denyConditions) {
 		displayData, err := createWtFwpmDisplayData0("Allow DNS inbound (IPv4)", "")
+		if err != nil {
+			return wrapErr(err)
+		}
+
+		filter.displayData = *displayData
+		filter.layerKey = cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4
+
+		err = fwpmFilterAdd0(session, &filter, 0, &filterID)
+		if err != nil {
+			return wrapErr(err)
+		}
+	}
+
+	// Exclude backend
+	filter.filterCondition = (*wtFwpmFilterCondition0)(unsafe.Pointer(&allowAppConditions[0]))
+	filter.numFilterConditions = uint32(len(allowAppConditions))
+	if len(allowAppConditions) > len(denyConditions) {
+		displayData, err := createWtFwpmDisplayData0("Allow outbound DNS on Backend (IPv4)", "")
+		if err != nil {
+			return wrapErr(err)
+		}
+
+		filter.displayData = *displayData
+		filter.layerKey = cFWPM_LAYER_ALE_AUTH_CONNECT_V4
+
+		err = fwpmFilterAdd0(session, &filter, 0, &filterID)
+		if err != nil {
+			return wrapErr(err)
+		}
+	}
+	if len(allowAppConditions) > len(denyConditions) {
+		displayData, err := createWtFwpmDisplayData0("Allow inbound DNS on Backend (IPv4)", "")
 		if err != nil {
 			return wrapErr(err)
 		}
