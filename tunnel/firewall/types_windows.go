@@ -84,6 +84,31 @@ type wtFwpmAction0 struct {
 	filterType windows.GUID // Windows type: GUID
 }
 
+// FWPM_CALLOUT0 defined in fwpmtypes.h
+// (https://learn.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_callout0).
+type wtFwpmCallout0 struct {
+	calloutKey      windows.GUID // Windows type: GUID
+	displayData     wtFwpmDisplayData0
+	flags           wtFwpmCalloutFlags
+	providerKey     *windows.GUID // Windows type: *GUID
+	providerData    wtFwpByteBlob
+	applicableLayer windows.GUID
+	calloutId       uint32
+}
+
+// FWPM_PROVIDER_CONTEXT0 defined in fwpmtypes.h
+// (https://learn.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_provider_context0).
+type wtFwpmProviderContext0 struct {
+	providerContextKey windows.GUID // Windows type: GUID
+	displayData        wtFwpmDisplayData0
+	flags              wtFwpmProviderContextFlags
+	providerKey        *windows.GUID // Windows type: *GUID
+	providerData       wtFwpByteBlob
+	providerType       wtFwpmProviderContextType
+	dataBuffer         *wtFwpByteBlob // There are other union options in the original struct, but we only need this one.
+	providerContextId  uint64
+}
+
 // Defined in fwpmu.h. 4cd62a49-59c3-4969-b7f3-bda5d32890a4
 var cFWPM_CONDITION_IP_LOCAL_INTERFACE = windows.GUID{
 	Data1: 0x4cd62a49,
@@ -195,6 +220,42 @@ const (
 	cFWPM_FILTER_FLAG_IPSEC_NO_ACQUIRE_INITIATE           wtFwpmFilterFlags = 0x00000800
 )
 
+// Defined in fwpmtypes.h
+type wtFwpmCalloutFlags uint32
+
+const (
+	cFWPM_CALLOUT_FLAG_PERSISTENT            wtFwpmCalloutFlags = 0x00010000
+	cFWPM_CALLOUT_FLAG_USES_PROVIDER_CONTEXT wtFwpmCalloutFlags = 0x00020000
+	cFWPM_CALLOUT_FLAG_REGISTERED            wtFwpmCalloutFlags = 0x00040000
+)
+
+// Defined in fwpmtypes.h
+type wtFwpmProviderContextFlags uint32
+
+const (
+	cFWPM_PROVIDER_CONTEXT_FLAG_PERSISTENT wtFwpmProviderContextFlags = 0x00000000
+)
+
+type wtFwpmProviderContextType int
+
+const (
+	cFWPM_IPSEC_KEYING_CONTEXT wtFwpmProviderContextType = iota
+	cFWPM_IPSEC_IKE_QM_TRANSPORT_CONTEXT
+	cFWPM_IPSEC_IKE_QM_TUNNEL_CONTEXT
+	cFWPM_IPSEC_AUTHIP_QM_TRANSPORT_CONTEXT
+	cFWPM_IPSEC_AUTHIP_QM_TUNNEL_CONTEXT
+	cFWPM_IPSEC_IKE_MM_CONTEXT
+	cFWPM_IPSEC_AUTHIP_MM_CONTEXT
+	cFWPM_CLASSIFY_OPTIONS_CONTEXT
+	cFWPM_GENERAL_CONTEXT
+	cFWPM_IPSEC_IKEV2_QM_TUNNEL_CONTEXT
+	cFWPM_IPSEC_IKEV2_MM_CONTEXT
+	cFWPM_IPSEC_DOSP_CONTEXT
+	cFWPM_IPSEC_IKEV2_QM_TRANSPORT_CONTEXT
+	cFWPM_NETWORK_CONNECTION_POLICY_CONTEXT
+	cFWPM_PROVIDER_CONTEXT_TYPE_MAX
+)
+
 // FWPM_LAYER_ALE_AUTH_CONNECT_V4 (c38d57d1-05a7-4c33-904f-7fbceee60e82) defined in fwpmu.h
 var cFWPM_LAYER_ALE_AUTH_CONNECT_V4 = windows.GUID{
 	Data1: 0xc38d57d1,
@@ -241,6 +302,22 @@ var cFWPM_LAYER_INBOUND_MAC_FRAME_NATIVE = windows.GUID{
 	Data2: 0x62ce,
 	Data3: 0x4f08,
 	Data4: [8]byte{0xae, 0x88, 0xb5, 0x6e, 0x85, 0x26, 0xdf, 0x50},
+}
+
+// c6e63c8c-b784-4562-aa7d-0a67cfcaf9a3
+var cFWPM_LAYER_ALE_CONNECT_REDIRECT_V4 = windows.GUID{
+	Data1: 0xc6e63c8c,
+	Data2: 0xb784,
+	Data3: 0x4562,
+	Data4: [8]byte{0xaa, 0x7d, 0x0a, 0x67, 0xcf, 0xca, 0xf9, 0xa3},
+}
+
+// 66978cad-c704-42ac-86ac-7c1a231bd253
+var cFWPM_LAYER_ALE_BIND_REDIRECT_V4 = windows.GUID{
+	Data1: 0x66978cad,
+	Data2: 0xc704,
+	Data3: 0x42ac,
+	Data4: [8]byte{0x86, 0xac, 0x7c, 0x1a, 0x23, 0x1b, 0xd2, 0x53},
 }
 
 // FWP_BITMAP_ARRAY64 defined in fwtypes.h

@@ -9,6 +9,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"golang.zx2c4.com/wireguard/windows/conf"
+	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 	"net/netip"
 	"runtime"
 	"unsafe"
@@ -41,6 +43,7 @@ func permitTunInterface(session uintptr, baseObjects *baseObjects, weight uint8,
 		subLayerKey:         baseObjects.filters,
 		weight:              filterWeight(weight),
 		numFilterConditions: 1,
+		flags:               cFWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT,
 		filterCondition:     (*wtFwpmFilterCondition0)(unsafe.Pointer(&ifaceCondition)),
 		action: wtFwpmAction0{
 			_type: cFWP_ACTION_PERMIT,
@@ -351,6 +354,233 @@ func permitLoopback(session uintptr, baseObjects *baseObjects, weight uint8) err
 	}
 
 	return nil
+}
+
+func enableSplitTunneling(session uintptr, baseObjects *baseObjects, weight uint8, splitTunnelConfig conf.SplitTunnel, tunnelLUID uint64) error {
+	calloutKey, _ := windows.GUIDFromString("{565ca03d-428a-42c9-b1a3-c8f081480f4a}")
+	_, err := createCallout(session, calloutKey, &baseObjects.splitTunnelProvider, cFWPM_LAYER_ALE_CONNECT_REDIRECT_V4, "Split-tunnel connect redirect callout")
+	if err != nil {
+		return wrapErr(err)
+	}
+
+	udpCalloutKey, _ := windows.GUIDFromString("{46f0a3fd-6404-41e3-b9f6-91b150c7ee8f}")
+	_, err = createCallout(session, udpCalloutKey, &baseObjects.splitTunnelProvider, cFWPM_LAYER_ALE_BIND_REDIRECT_V4, "Split-tunnel bind redirect callout")
+	if err != nil {
+		return wrapErr(err)
+	}
+
+	localInterface, err := getLocalInterface(tunnelLUID)
+	if err != nil {
+		return wrapErr(err)
+	}
+	providerContextKey, err := createProviderContext(session, &baseObjects.splitTunnelProvider, "Split-tunnel provider context", "Split-tunnel provider context", localInterface)
+	if err != nil {
+		return wrapErr(err)
+	}
+
+	excludedAppPaths := splitTunnelConfig.ExcludedApps
+	for _, appPath := range excludedAppPaths {
+		err = permitApp(session, baseObjects, weight, appPath)
+		if err != nil {
+			return wrapErr(err)
+		}
+
+		err = createAppFilter(session, baseObjects, cFWPM_LAYER_ALE_CONNECT_REDIRECT_V4, weight, appPath, calloutKey, providerContextKey)
+		if err != nil {
+			return wrapErr(err)
+		}
+
+		err = createAppFilter(session, baseObjects, cFWPM_LAYER_ALE_BIND_REDIRECT_V4, weight, appPath, udpCalloutKey, providerContextKey)
+		if err != nil {
+			return wrapErr(err)
+		}
+	}
+
+	return nil
+}
+
+func getLocalInterface(tunnelLUID uint64) (netip.Addr, error) {
+	interfaces, err := winipcfg.GetAdaptersAddresses(windows.AF_INET, winipcfg.GAAFlagIncludeGateways)
+	if err != nil {
+		return netip.Addr{}, err
+	}
+
+	for _, iface := range interfaces {
+		isValidInterface := iface.OperStatus == winipcfg.IfOperStatusUp && iface.FirstUnicastAddress != nil && iface.FirstGatewayAddress != nil
+		isTunnel := uint64(iface.LUID) == tunnelLUID
+
+		if isValidInterface && !isTunnel {
+			addr, ok := netip.AddrFromSlice(iface.FirstUnicastAddress.Address.IP())
+			if ok {
+				return addr, nil
+			}
+		}
+	}
+
+	return netip.Addr{}, errors.New("no valid local interface found")
+}
+
+func permitApp(session uintptr, baseObjects *baseObjects, weight uint8, appPath string) error {
+	appID, err := getAppId(appPath)
+	if err != nil {
+		return wrapErr(err)
+	}
+	defer fwpmFreeMemory0(unsafe.Pointer(&appID))
+
+	conditions := []wtFwpmFilterCondition0{
+		{
+			fieldKey:  cFWPM_CONDITION_ALE_APP_ID,
+			matchType: cFWP_MATCH_EQUAL,
+			conditionValue: wtFwpConditionValue0{
+				_type: cFWP_BYTE_BLOB_TYPE,
+				value: uintptr(unsafe.Pointer(appID)),
+			},
+		},
+	}
+
+	filter := wtFwpmFilter0{
+		providerKey:         &baseObjects.provider,
+		subLayerKey:         baseObjects.filters,
+		weight:              filterWeight(weight),
+		numFilterConditions: uint32(len(conditions)),
+		filterCondition:     (*wtFwpmFilterCondition0)(unsafe.Pointer(&conditions[0])),
+		action: wtFwpmAction0{
+			_type: cFWP_ACTION_PERMIT,
+		},
+	}
+
+	filterID := uint64(0)
+
+	{
+		displayData, err := createWtFwpmDisplayData0("Split-tunnel permit app (out)", "")
+		if err != nil {
+			return wrapErr(err)
+		}
+
+		filter.displayData = *displayData
+		filter.layerKey = cFWPM_LAYER_ALE_AUTH_CONNECT_V4
+
+		err = fwpmFilterAdd0(session, &filter, 0, &filterID)
+		if err != nil {
+			return wrapErr(err)
+		}
+	}
+
+	{
+		displayData, err := createWtFwpmDisplayData0("Split-tunnel permit app (in)", "")
+		if err != nil {
+			return wrapErr(err)
+		}
+
+		filter.displayData = *displayData
+		filter.layerKey = cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4
+
+		err = fwpmFilterAdd0(session, &filter, 0, &filterID)
+		if err != nil {
+			return wrapErr(err)
+		}
+	}
+
+	return nil
+}
+
+func createAppFilter(session uintptr, baseObjects *baseObjects, layerKey windows.GUID, weight uint8, appPath string, calloutKey windows.GUID, providerContextKey windows.GUID) error {
+	appID, err := getAppId(appPath)
+	if err != nil {
+		return wrapErr(err)
+	}
+	defer fwpmFreeMemory0(unsafe.Pointer(&appID))
+
+	conditions := []wtFwpmFilterCondition0{
+		{
+			fieldKey:  cFWPM_CONDITION_ALE_APP_ID,
+			matchType: cFWP_MATCH_EQUAL,
+			conditionValue: wtFwpConditionValue0{
+				_type: cFWP_BYTE_BLOB_TYPE,
+				value: uintptr(unsafe.Pointer(appID)),
+			},
+		},
+	}
+
+	displayData, err := createWtFwpmDisplayData0("Split-tunnel app filter", appPath)
+	if err != nil {
+		return wrapErr(err)
+	}
+
+	filter := wtFwpmFilter0{
+		providerKey:         &baseObjects.splitTunnelProvider,
+		subLayerKey:         baseObjects.splitTunnelFilters,
+		displayData:         *displayData,
+		weight:              filterWeight(weight),
+		layerKey:            layerKey,
+		numFilterConditions: uint32(len(conditions)),
+		filterCondition:     (*wtFwpmFilterCondition0)(unsafe.Pointer(&conditions[0])),
+		action: wtFwpmAction0{
+			_type:      cFWP_ACTION_CALLOUT_TERMINATING,
+			filterType: calloutKey,
+		},
+		providerContextKey: providerContextKey,
+		flags:              cFWPM_FILTER_FLAG_HAS_PROVIDER_CONTEXT,
+	}
+
+	filterID := uint64(0)
+
+	err = fwpmFilterAdd0(session, &filter, 0, &filterID)
+	if err != nil {
+		return wrapErr(err)
+	}
+
+	return nil
+}
+
+func createProviderContext(session uintptr, providerKey *windows.GUID, name string, description string, localInterface netip.Addr) (windows.GUID, error) {
+	displayData, err := createWtFwpmDisplayData0(name, description)
+	if err != nil {
+		return windows.GUID{}, wrapErr(err)
+	}
+
+	providerContextKey, _ := windows.GenerateGUID()
+	localInterfaceBytes := localInterface.As4()
+	providerContext := &wtFwpmProviderContext0{
+		providerContextKey: providerContextKey,
+		providerKey:        providerKey,
+		displayData:        *displayData,
+		providerType:       cFWPM_GENERAL_CONTEXT,
+		dataBuffer: &wtFwpByteBlob{
+			size: uint32(len(localInterfaceBytes)),
+			data: &localInterfaceBytes[0],
+		},
+	}
+
+	providerContextID := uint64(0)
+	err = fwpmProviderContextAdd0(session, providerContext, 0, &providerContextID)
+	if err != nil {
+		return windows.GUID{}, wrapErr(err)
+	}
+
+	return providerContextKey, nil
+}
+
+func createCallout(session uintptr, calloutKey windows.GUID, providerKey *windows.GUID, layer windows.GUID, name string) (uint32, error) {
+	displayData, err := createWtFwpmDisplayData0(name, "")
+	if err != nil {
+		return 0, wrapErr(err)
+	}
+	callout := wtFwpmCallout0{
+		calloutKey:      calloutKey,
+		displayData:     *displayData,
+		flags:           cFWPM_CALLOUT_FLAG_USES_PROVIDER_CONTEXT,
+		providerKey:     providerKey,
+		applicableLayer: layer,
+	}
+
+	calloutId := uint32(0)
+	err = fwpmCalloutAdd0(session, &callout, 0, &calloutId)
+	if err != nil {
+		return 0, wrapErr(err)
+	}
+
+	return calloutId, nil
 }
 
 func permitLocalNetworksIPv4(session uintptr, baseObjects *baseObjects, weight uint8) error {

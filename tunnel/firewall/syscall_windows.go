@@ -23,6 +23,12 @@ package firewall
 // https://docs.microsoft.com/en-us/windows/desktop/api/fwpmu/nf-fwpmu-fwpmfilteradd0
 //sys	fwpmFilterAdd0(engineHandle uintptr, filter *wtFwpmFilter0, sd uintptr, id *uint64) (err error) [failretval!=0] = fwpuclnt.FwpmFilterAdd0
 
+// https://learn.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmprovidercontextadd0
+//sys fwpmProviderContextAdd0(engineHandle uintptr, providerContext *wtFwpmProviderContext0, sd uintptr, id *uint64) (err error) [failretval!=0] = fwpuclnt.FwpmProviderContextAdd0
+
+// https://learn.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmcalloutadd0
+//sys	fwpmCalloutAdd0(engineHandle uintptr, callout *wtFwpmCallout0, sd uintptr, id *uint32) (err error) [failretval!=0] = fwpuclnt.FwpmCalloutAdd0
+
 // https://docs.microsoft.com/en-us/windows/desktop/api/Fwpmu/nf-fwpmu-fwpmtransactionbegin0
 //sys	fwpmTransactionBegin0(engineHandle uintptr, flags uint32) (err error) [failretval!=0] = fwpuclnt.FwpmTransactionBegin0
 
