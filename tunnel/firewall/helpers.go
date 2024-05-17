@@ -8,6 +8,7 @@ package firewall
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"syscall"
 	"unsafe"
@@ -152,17 +153,13 @@ func getAppId(filePath string) (*wtFwpByteBlob, error) {
 }
 
 func getBackendAppID() (*wtFwpByteBlob, error) {
-	currentFile := "C:\\Users\\lezzi\\Documents\\DuckDuckGo\\windows-browser\\NetworkProtection\\NetworkProtection\\bin\\ARM64\\Debug\\net6.0\\DuckDuckGo.VPN.Backend.exe"
-
-	curFilePtr, err := windows.UTF16PtrFromString(currentFile)
+	currentFile, err := os.Executable()
 	if err != nil {
 		return nil, wrapErr(err)
 	}
 
-	var appID *wtFwpByteBlob
-	err = fwpmGetAppIdFromFileName0(curFilePtr, unsafe.Pointer(&appID))
-	if err != nil {
-		return nil, wrapErr(err)
-	}
-	return appID, nil
+	// Construct the absolute path of the target file in the same directory
+	backendFile := filepath.Join(filepath.Dir(currentFile), "DuckDuckGo.VPN.Backend.exe")
+
+	return getAppId(backendFile)
 }
