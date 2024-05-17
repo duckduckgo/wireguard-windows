@@ -158,7 +158,6 @@ func getBackendAppID() (*wtFwpByteBlob, error) {
 		return nil, wrapErr(err)
 	}
 
-	// Construct the absolute path of the target file in the same directory
 	backendFile := filepath.Join(filepath.Dir(currentFile), "DuckDuckGo.VPN.Backend.exe")
 
 	return getAppId(backendFile)
