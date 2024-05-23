@@ -258,6 +258,63 @@ func permitWireGuardService(session uintptr, baseObjects *baseObjects, weight ui
 	return nil
 }
 
+func permitBackend(session uintptr, baseObjects *baseObjects, weight uint8) error {
+	//
+	// Condition is the exe path
+	//
+	appID, err := getBackendAppID()
+	if err != nil {
+		return wrapErr(err)
+	}
+	defer fwpmFreeMemory0(unsafe.Pointer(&appID))
+
+	condition := wtFwpmFilterCondition0{
+		fieldKey:  cFWPM_CONDITION_ALE_APP_ID,
+		matchType: cFWP_MATCH_EQUAL,
+		conditionValue: wtFwpConditionValue0{
+			_type: cFWP_BYTE_BLOB_TYPE,
+			value: uintptr(unsafe.Pointer(appID)),
+		},
+	}
+
+	//
+	// Assemble the filter.
+	//
+	filter := wtFwpmFilter0{
+		providerKey:         &baseObjects.provider,
+		subLayerKey:         baseObjects.filters,
+		weight:              filterWeight(weight),
+		flags:               cFWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT,
+		numFilterConditions: 1,
+		filterCondition:     (*wtFwpmFilterCondition0)(unsafe.Pointer(&condition)),
+		action: wtFwpmAction0{
+			_type: cFWP_ACTION_PERMIT,
+		},
+	}
+
+	filterID := uint64(0)
+
+	//
+	// #1 Permit outbound IPv4 traffic.
+	//
+	{
+		displayData, err := createWtFwpmDisplayData0("Permit unrestricted outbound traffic for DuckDuckGo Registration Backend (IPv4)", "")
+		if err != nil {
+			return wrapErr(err)
+		}
+
+		filter.displayData = *displayData
+		filter.layerKey = cFWPM_LAYER_ALE_AUTH_CONNECT_V4
+
+		err = fwpmFilterAdd0(session, &filter, 0, &filterID)
+		if err != nil {
+			return wrapErr(err)
+		}
+	}
+
+	return nil
+}
+
 func permitLoopback(session uintptr, baseObjects *baseObjects, weight uint8) error {
 	condition := wtFwpmFilterCondition0{
 		fieldKey:  cFWPM_CONDITION_FLAGS,
